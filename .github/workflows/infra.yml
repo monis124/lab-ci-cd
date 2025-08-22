@@ -24,8 +24,6 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 0  # necessário para fazer pull/rebase depois
 
     - name: AWS | Configure credentials
       uses: aws-actions/configure-aws-credentials@v4
@@ -62,7 +60,6 @@ jobs:
         if [ -f versions.tf ]; then
           echo "TF_VERSION=$(grep required_version versions.tf | sed 's/\"//g' | awk '{ print $3 }')" >> $GITHUB_ENV
         else
-          echo "Not set required_version in versions.tf, using default version from YAML"
           echo "TF_VERSION=${{ env.TF_VERSION }}" >> $GITHUB_ENV
         fi
 
@@ -98,7 +95,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.tflint.d/plugins
-        key: ${{ matrix.os }}-tflint-${{ hashFiles('.tflint.hcl') }}
+        key: ${{ runner.os }}-tflint-${{ hashFiles('.tflint.hcl') }}
 
     - name: TFlint | Setup TFLint
       uses: terraform-linters/setup-tflint@v4
