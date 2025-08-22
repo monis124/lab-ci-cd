@@ -4,11 +4,13 @@ on:
   push:
     branches:
       - infra
+
 env:
   TF_VERSION: 1.10.5
   TF_LINT_VERSION: v0.52.0
   DESTROY: false
   ENVIRONMENT: prod
+
 jobs:
   terraform:
     name: 'Deploy Infra'
@@ -22,6 +24,8 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # necessário para fazer pull/rebase depois
 
     - name: AWS | Configure credentials
       uses: aws-actions/configure-aws-credentials@v4
@@ -37,16 +41,29 @@ jobs:
         working-dir: ./infra
         output-file: README.md
         output-method: inject
-        git-push: "true"
+        git-push: "false"
+
+    - name: Git | Configure user
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+    - name: Git | Pull latest changes
+      run: git pull --rebase origin ${{ github.ref_name }}
+
+    - name: Git | Commit and push documentation
+      run: |
+        git add infra/README.md
+        git diff --quiet && git diff --staged --quiet || git commit -m "docs: update terraform-docs"
+        git push origin ${{ github.ref_name }}
 
     - name: Terraform | Check required version
       run: |
-        if [ -f versions.tf ];
-          then
-            echo "TF_VERSION=$(grep required_version versions.tf | sed 's/"//g' | awk '{ print $3 }')" >> $GITHUB_ENV
-          else
-            echo "Not set required_version in versions.tf, using default version in variable TF_VERSION in file .github/workflows/infra.yml"
-            echo "TF_VERSION="${{ env.TF_VERSION }}"" >> $GITHUB_ENV
+        if [ -f versions.tf ]; then
+          echo "TF_VERSION=$(grep required_version versions.tf | sed 's/\"//g' | awk '{ print $3 }')" >> $GITHUB_ENV
+        else
+          echo "Not set required_version in versions.tf, using default version from YAML"
+          echo "TF_VERSION=${{ env.TF_VERSION }}" >> $GITHUB_ENV
         fi
 
     - name: Terraform | Setup
@@ -59,14 +76,14 @@ jobs:
 
     - name: Terraform | Set up statefile S3 Bucket for Backend
       run: |
-          echo "terraform {
-            backend \"s3\" {
-              bucket   = \"${{ secrets.AWS_ACCOUNT_ID }}-tfstate\"
-              key      = \"infra-${{ env.ENVIRONMENT }}.tfstate\"
-              region   = \"${{ vars.AWS_REGION }}\"
-            }
-          }" >> provider.tf
-          cat provider.tf
+        echo "terraform {
+          backend \"s3\" {
+            bucket   = \"${{ secrets.AWS_ACCOUNT_ID }}-tfstate\"
+            key      = \"infra-${{ env.ENVIRONMENT }}.tfstate\"
+            region   = \"${{ vars.AWS_REGION }}\"
+          }
+        }" >> provider.tf
+        cat provider.tf
 
     - name: Terraform | Initialize backend
       run: terraform init
